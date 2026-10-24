@@ -1,0 +1,4 @@
+# PacketPulse Core Requirements
+# The core network engine uses Python 3.10+ standard library (socket, struct, select, urllib)
+# Optional dependencies for testing and visualizers:
+pytest>=7.0.0

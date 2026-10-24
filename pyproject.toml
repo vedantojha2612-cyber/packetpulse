@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "packetpulse"
+version = "1.0.0"
+description = "Real-Time 3D Network Hop & Protocol Radar with Cyberpunk ANSI/Braille Terminal HUD and WebGL Earth Globe"
+readme = "README.md"
+authors = [
+    { name = "Saarthak Ojha", email = "vedantojha2612@gmail.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = [
+    "networking",
+    "traceroute",
+    "packet-analysis",
+    "rfc1071",
+    "icmp",
+    "raw-sockets",
+    "geoip",
+    "threejs",
+    "terminal-graphics",
+    "cyberpunk",
+    "webgl",
+    "telemetry"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Telecommunications Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Networking :: Monitoring",
+    "Topic :: Scientific/Engineering :: Visualization"
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0"
+]
+
+[project.scripts]
+packetpulse = "cli:main"
+
+[project.urls]
+Homepage = "https://github.com/vedantojha2612-cyber/packetpulse"
+Repository = "https://github.com/vedantojha2612-cyber/packetpulse"
+IssueTracker = "https://github.com/vedantojha2612-cyber/packetpulse/issues"
