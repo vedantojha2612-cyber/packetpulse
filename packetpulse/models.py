@@ -1,59 +1,44 @@
-"""Data structures and telemetry metrics models."""
+"""Data models for PacketPulse network telemetry."""
 
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict
-from typing import List, Optional, Dict, Any
+from typing import Optional, List, Dict, Any
 
 
 @dataclass
 class Hop:
-    """Represents a single routing hop along the network transit path."""
+    """Represents a single router hop in a network trajectory."""
     hop_num: int
     ip: Optional[str] = None
+    hostname: Optional[str] = None
     rtt_ms: Optional[float] = None
+    min_rtt_ms: Optional[float] = None
+    max_rtt_ms: Optional[float] = None
     jitter_ms: Optional[float] = None
-    city: Optional[str] = None
-    country: Optional[str] = None
-    country_code: Optional[str] = None
+    loss_pct: float = 0.0
     lat: Optional[float] = None
     lon: Optional[float] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
     asn: Optional[str] = None
-    timed_out: bool = False
     is_destination: bool = False
-    protocol: str = "ICMP"
+    timed_out: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
 @dataclass
-class TelemetryResult:
-    """Aggregated route telemetry result across all hops."""
+class RouteTelemetry:
+    """Complete route trajectory metadata and metrics."""
     target: str
     destination_ip: str
     hops: List[Hop] = field(default_factory=list)
     total_time_ms: float = 0.0
+    avg_jitter_ms: float = 0.0
+    packet_loss_pct: float = 0.0
     reached_destination: bool = False
-
-    @property
-    def avg_jitter_ms(self) -> float:
-        valid_jitters = [h.jitter_ms for h in self.hops if h.jitter_ms is not None]
-        return round(sum(valid_jitters) / len(valid_jitters), 2) if valid_jitters else 0.0
-
-    @property
-    def packet_loss_pct(self) -> float:
-        if not self.hops:
-            return 0.0
-        timeouts = sum(1 for h in self.hops if h.timed_out)
-        return round((timeouts / len(self.hops)) * 100, 1)
+    mode_used: str = "raw_icmp"  # 'raw_icmp', 'system_fallback', or 'simulated'
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "target": self.target,
-            "destination_ip": self.destination_ip,
-            "hops": [h.to_dict() for h in self.hops],
-            "total_time_ms": self.total_time_ms,
-            "reached_destination": self.reached_destination,
-            "avg_jitter_ms": self.avg_jitter_ms,
-            "packet_loss_pct": self.packet_loss_pct,
-        }
+        return asdict(self)
