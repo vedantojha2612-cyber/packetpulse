@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PacketPulse // Real-Time 3D Spatial Network Hop & Protocol Radar</title>
+  <style>
+    :root {
+      --bg: #030712;
+      --panel-bg: rgba(6, 12, 26, 0.82);
+      --panel-border: rgba(0, 240, 255, 0.25);
+      --cyan: #00f0ff;
+      --cyan-glow: rgba(0, 240, 255, 0.4);
+      --neon-green: #00ff88;
+      --amber: #ffb800;
+      --crimson: #ff003c;
+      --purple: #b388ff;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #webgl-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Subtle CRT scanline and vignette overlay */
+    .overlay-vignette {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at center, transparent 40%, rgba(2, 4, 10, 0.85) 100%);
+      z-index: 2;
+    }
+
+    .overlay-scanlines {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+      background-size: 100% 4px;
+      z-index: 2;
+      opacity: 0.35;
+    }
+
+    /* HUD Layer */
+    .hud-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      grid-template-columns: 340px 1fr 380px;
+      padding: 18px;
+      gap: 16px;
+    }
+
+    .interactive {
+      pointer-events: auto;
+    }
+
+    .panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      backdrop-filter: blur(12px);
+      border-radius: 6px;
+      padding: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(0, 240, 255, 0.05);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: 12px;
+      width: 24px;
+      height: 2px;
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+    }
+
+    /* Header Bar */
+    .header-bar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      color: var(--cyan);
+      font-size: 22px;
+      text-shadow: 0 0 12px var(--cyan);
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    .brand-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #fff;
+      text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .controls-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      background: rgba(0, 240, 255, 0.08);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .input-label {
+      padding: 6px 10px;
+      font-size: 11px;
+      color: var(--cyan);
+      background: rgba(0, 240, 255, 0.12);
+      border-right: 1px solid rgba(0, 240, 255, 0.2);
+    }
+
+    .target-input {
+      background: transparent;
+      border: none;
+      color: #fff;
+      padding: 6px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+      width: 170px;
+    }
+
+    .btn {
+      background: rgba(0, 240, 255, 0.15);
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+      padding: 6px 16px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: var(--cyan);
+      color: #030712;
+      box-shadow: 0 0 16px var(--cyan);
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    select.btn-select {
+      background: rgba(6, 12, 26, 0.9);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* Sidebars */
+    .sidebar-left {
+      grid-column: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-height: calc(100vh - 170px);
+    }
+
+    .sidebar-right {
+      grid-column: 3;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 170px);
+    }
+
+    .panel-header {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric-card {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      padding: 10px;
+    }
+
+    .metric-val {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .metric-lbl {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .route-target-box {
+      background: rgba(0, 240, 255, 0.05);
+      border-left: 3px solid var(--cyan);
+      padding: 10px;
+      border-radius: 0 4px 4px 0;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+
+    /* Hop Stream List */
+    .hop-list {
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+    }
+
+    .hop-list::-webkit-scrollbar {
+      width: 4px;
+    }
+    .hop-list::-webkit-scrollbar-thumb {
+      background: rgba(0, 240, 255, 0.2);
+      border-radius: 2px;
+    }
+
+    .hop-item {
+      background: rgba(10, 18, 36, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      padding: 8px 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .hop-item:hover, .hop-item.active {
+      border-color: var(--cyan);
+      background: rgba(0, 240, 255, 0.12);
+      transform: translateX(-2px);
+    }
+
+    .hop-row-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .hop-num {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cyan);
+    }
+
+    .hop-ip {
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .hop-rtt {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .rtt-fast { background: rgba(0, 255, 136, 0.15); color: var(--neon-green); }
+    .rtt-med { background: rgba(255, 184, 0, 0.15); color: var(--amber); }
+    .rtt-slow { background: rgba(255, 0, 60, 0.15); color: var(--crimson); }
+
+    .hop-row-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .hop-location {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 170px;
+    }
+
+    .hop-asn {
+      color: var(--purple);
+      font-size: 9px;
+    }
+
+    /* Bottom Bar */
+    .bottom-bar {
+      grid-column: 1 / -1;
+      height: 90px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 16px;
+    }
+
+    .chart-container {
+      flex: 1;
+      height: 100%;
+      position: relative;
+    }
+
+    canvas#latency-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Status & Loading Badge */
+    .status-indicator">
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--neon-green);
+      box-shadow: 0 0 8px var(--neon-green);
+    }
+
+    .status-dot.scanning {
+      background: var(--amber);
+      box-shadow: 0 0 10px var(--amber);
+      animation: blink 0.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.8; }
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  
+    /* 3D Raycaster Tooltip */
+    #globe-tooltip {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: rgba(3, 7, 18, 0.94);
+      border: 1px solid var(--cyan);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.45);
+      border-radius: 5px;
+      padding: 8px 12px;
+      font-size: 11px;
+      z-index: 100;
+      color: #fff;
+      transform: translate(-50%, -125%);
+      backdrop-filter: blur(8px);
+      transition: opacity 0.15s ease;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="overlay-vignette"></div>
+  <div class="overlay-scanlines"></div>
+
+  <!-- 3D Canvas -->
+  <div id="webgl-canvas"></div>
+  <div id="globe-tooltip"></div>
+
+  <!-- Cyberpunk HUD Overlay -->
+  <div class="hud-layer">
+    <!-- Top Header -->
+    <header class="panel header-bar interactive">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div>
+          <div class="brand-title">PACKETPULSE</div>
+          <div class="brand-subtitle">3D Spatial Network Radar & Wireframe Telemetry</div>
+        </div>
+      </div>
+
+      <div class="controls-wrapper">
+        <select id="preset-select" class="btn-select">
+          <option value="">-- Quick Targets --</option>
+          <option value="8.8.8.8">Google DNS (Mountain View)</option>
+          <option value="1.1.1.1">Cloudflare Edge (San Francisco)</option>
+          <option value="tokyo.packetpulse.internal">Tokyo Equinix IX (Japan)</option>
+          <option value="london.packetpulse.internal">London Telehouse (UK)</option>
+          <option value="frankfurt.packetpulse.internal">Frankfurt DE-CIX (Germany)</option>
+          <option value="sydney.packetpulse.internal">Sydney Global Transit (Australia)</option>
+        </select>
+
+        <div class="input-group">
+          <span class="input-label">DEST</span>
+          <input type="text" id="target-input" class="target-input" value="google.com" spellcheck="false">
+        </div>
+
+        <select id="mode-select" class="btn-select">
+          <option value="simulated">Simulated Backbone</option>
+          <option value="auto">Auto (Raw / System)</option>
+        </select>
+
+        <button id="btn-rotate" class="btn" title="Toggle 3D Globe Rotation"><span>🔄 ROTATE</span></button>
+        <button id="btn-trace" class="btn">
+          <span>📡 DISPATCH TRACE</span>
+        </button>
+      </div>
+
+      <div class="status-indicator">
+        <div id="status-dot" class="status-dot"></div>
+        <span id="status-text">RADAR READY</span>
+      </div>
+    </header>
+
+    <!-- Left Telemetry Panel -->
+    <aside class="panel sidebar-left interactive">
+      <div class="panel-header">
+        <span>Route Telemetry</span>
+        <span id="target-reached-pill" style="font-size: 10px; color: var(--neon-green);">CONNECTED</span>
+      </div>
+
+      <div class="route-target-box">
+        <div style="font-size: 10px; color: var(--text-muted);">DESTINATION RESOLVED:</div>
+        <div id="disp-dest-ip" style="font-weight: 700; color: #fff; font-size: 13px;">142.251.223.238</div>
+        <div id="disp-dest-host" style="font-size: 11px; color: var(--cyan);">google.com</div>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-val" id="metric-hops">8</div>
+          <div class="metric-lbl">Total Hops</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val" id="metric-avg-rtt">24.2 ms</div>
+          <div class="metric-lbl">Avg Latency</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val" id="metric-jitter">12.4 ms</div>
+          <div class="metric-lbl">Avg Jitter</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val" id="metric-loss">0.0%</div>
+          <div class="metric-lbl">Packet Loss</div>
+        </div>
+      </div>
+
+      <div class="panel-header" style="margin-top: 4px;">
+        <span>Active Cable Trajectory</span>
+      </div>
+      <div id="cable-trajectory-info" style="font-size: 11px; color: var(--text-muted); line-height: 1.6;">
+        Traversing Indian Ocean $\rightarrow$ Transpacific Subsea Fiber Cable $\rightarrow$ North American Terrestrial Backbone.
+      </div>
+    </aside>
+
+    <!-- Right Hop Stream Panel -->
+    <aside class="panel sidebar-right interactive">
+      <div class="panel-header">
+        <span>Hop Traversal Stream</span>
+        <span id="stream-count" style="font-size: 10px; color: var(--cyan);">8 Hops</span>
+      </div>
+      <div id="hop-list" class="hop-list">
+        <!-- Rendered dynamically -->
+      </div>
+    </aside>
+
+    <!-- Bottom Latency Timeline Chart -->
+    <footer class="panel bottom-bar interactive">
+      <div style="width: 130px;">
+        <div style="font-size: 10px; color: var(--cyan); font-weight: 700; text-transform: uppercase;">RTT Profile</div>
+        <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Microsecond Latency Histogram</div>
+      </div>
+      <div class="chart-container">
+        <canvas id="latency-canvas"></canvas>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Three.js and OrbitControls -->
+  <script src="/vendor/three.min.js"></script>
+  <script src="/vendor/OrbitControls.js"></script>
+
+  <script>
+    // Audio synthesizer for cybernetic telemetry feedback
+    class CyberAudio {
+      constructor() {
+        this.ctx = null;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+      }
+      beep(freq = 880, duration = 0.05, type = 'sine') {
+        try {
+          this.init();
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch (e) {}
+      }
+    }
+    const audio = new CyberAudio();
+
+    // Geographic country code to flag emoji mapper
+    function getCountryFlag(country) {
+      if (!country) return '🌐';
+      const c = country.toLowerCase();
+      if (c.includes('united states') || c.includes('us')) return '🇺🇸';
+      if (c.includes('india')) return '🇮🇳';
+      if (c.includes('singapore')) return '🇸🇬';
+      if (c.includes('japan')) return '🇯🇵';
+      if (c.includes('germany')) return '🇩🇪';
+      if (c.includes('united kingdom') || c.includes('uk')) return '🇬🇧';
+      if (c.includes('australia')) return '🇦🇺';
+      if (c.includes('france')) return '🇫🇷';
+      if (c.includes('netherlands')) return '🇳🇱';
+      if (c.includes('canada')) return '🇨🇦';
+      if (c.includes('brazil')) return '🇧🇷';
+      if (c.includes('ireland')) return '🇮🇪';
+      if (c.includes('local') || c.includes('private')) return '🏠';
+      return '🌐';
+    }
+
+
+    // Coordinate conversion: (lat, lon) -> 3D Vector on sphere of radius R
+    
+    // HTML entity escaping for XSS prevention
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function latLonToVector3(lat, lon, radius) {
+      const phi = (90 - lat) * (Math.PI / 180);
+      const theta = (lon + 180) * (Math.PI / 180);
+      const x = -(radius * Math.sin(phi) * Math.cos(theta));
+      const z = radius * Math.sin(phi) * Math.sin(theta);
+      const y = radius * Math.cos(phi);
+      return new THREE.Vector3(x, y, z);
+    }
+
+    // Great circle trajectory curve generator rising above sphere
+    function createTrajectoryCurve(v1, v2, globeRadius) {
+      const distance = v1.distanceTo(v2);
+      const mid = v1.clone().add(v2).multiplyScalar(0.5);
+      const midLength = mid.length();
+      // Elevation proportional to distance
+      const altitude = globeRadius + Math.min(25, distance * 0.35);
+      mid.normalize().multiplyScalar(altitude);
+      return new THREE.QuadraticBezierCurve3(v1, mid, v2);
+    }
+
+    // Three.js Scene Setup
+    const container = document.getElementById('webgl-canvas');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x030712, 0.003);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
+    camera.position.set(0, 30, 160);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 60;
+    controls.maxDistance = 350;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.6;
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0x00f0ff, 1.2);
+    dirLight.position.set(100, 100, 100);
+    scene.add(dirLight);
+
+    // Starfield Background
+    const starGeo = new THREE.BufferGeometry();
+    const starCount = 1200;
+    const starPos = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount * 3; i += 3) {
+      starPos[i] = (Math.random() - 0.5) * 1200;
+      starPos[i + 1] = (Math.random() - 0.5) * 1200;
+      starPos[i + 2] = (Math.random() - 0.5) * 1200;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0x64748b, size: 1.2, transparent: true, opacity: 0.7 });
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
+    // 3D Cyberpunk Earth Sphere
+    const GLOBE_RADIUS = 40;
+    const globeGroup = new THREE.Group();
+    scene.add(globeGroup);
+
+    // Base dark sphere
+    const sphereGeo = new THREE.SphereGeometry(GLOBE_RADIUS, 48, 48);
+    const sphereMat = new THREE.MeshPhongMaterial({
+      color: 0x050d1a,
+      emissive: 0x020710,
+      shininess: 25,
+      wireframe: false,
+    });
+    const globeMesh = new THREE.Mesh(sphereGeo, sphereMat);
+    globeGroup.add(globeMesh);
+
+    // Wireframe Lat/Lon Grid Shell
+    const wireGeo = new THREE.SphereGeometry(GLOBE_RADIUS + 0.1, 32, 24);
+    const wireMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.15,
+    });
+    const wireMesh = new THREE.Mesh(wireGeo, wireMat);
+    globeGroup.add(wireMesh);
+
+    // Glowing Atmospheric Fresnel Shader Shell
+    const atmosphereGeo = new THREE.SphereGeometry(GLOBE_RADIUS * 1.15, 48, 48);
+    const atmosphereMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vNormal;
+        void main() {
+          float intensity = pow(0.68 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.2);
+          gl_FragColor = vec4(0.0, 0.94, 1.0, 1.0) * intensity;
+        }
+      `,
+      blending: THREE.AdditiveBlending,
+      side: THREE.BackSide,
+      transparent: true,
+    });
+    const atmosphereMesh = new THREE.Mesh(atmosphereGeo, atmosphereMat);
+    globeGroup.add(atmosphereMesh);
+
+
+    // Equator and Meridian Glowing Rings
+    const ringMat = new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.35 });
+    const ringGeo = new THREE.BufferGeometry();
+    const ringPoints = [];
+    for (let i = 0; i <= 64; i++) {
+      const th = (i / 64) * Math.PI * 2;
+      ringPoints.push(new THREE.Vector3(Math.cos(th) * (GLOBE_RADIUS + 0.2), 0, Math.sin(th) * (GLOBE_RADIUS + 0.2)));
+    }
+    ringGeo.setFromPoints(ringPoints);
+    const equator = new THREE.Line(ringGeo, ringMat);
+    globeGroup.add(equator);
+
+    // Trajectory and Hop Markers Group
+    const trajectoryGroup = new THREE.Group();
+    globeGroup.add(trajectoryGroup);
+
+    // Dynamic Pulses (moving packets along arcs)
+    let activePulses = [];
+
+    function clearTrajectory() {
+      while (trajectoryGroup.children.length > 0) {
+        const obj = trajectoryGroup.children[0];
+        trajectoryGroup.remove(obj);
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      }
+      activePulses = [];
+    }
+
+    // Render Trajectory Arcs & Markers
+    function renderTelemetryVisualization(telemetry) {
+      clearTrajectory();
+
+      if (!telemetry || !telemetry.hops || telemetry.hops.length === 0) return;
+
+      const hops = telemetry.hops.filter(h => !h.timed_out && (h.lat !== null && h.lat !== undefined));
+      if (hops.length === 0) return;
+
+      const points = [];
+      hops.forEach((hop, idx) => {
+        const pos = latLonToVector3(hop.lat || 0, hop.lon || 0, GLOBE_RADIUS + 0.3);
+        points.push(pos);
+
+        // Marker Pin
+        const isDest = hop.is_destination;
+        const pinColor = isDest ? 0xff003c : (idx === 0 ? 0x00ff88 : 0x00f0ff);
+        const pinGeo = new THREE.SphereGeometry(isDest ? 0.9 : 0.6, 12, 12);
+        const pinMat = new THREE.MeshBasicMaterial({ color: pinColor });
+        const pin = new THREE.Mesh(pinGeo, pinMat);
+        pin.position.copy(pos);
+        pin.userData = { hop, idx };
+        trajectoryGroup.add(pin);
+
+        // Halo ring around pin
+        const haloGeo = new THREE.RingGeometry(0.8, 1.4, 16);
+        const haloMat = new THREE.MeshBasicMaterial({ color: pinColor, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+        const halo = new THREE.Mesh(haloGeo, haloMat);
+        halo.position.copy(pos);
+        halo.lookAt(pos.clone().multiplyScalar(2));
+        trajectoryGroup.add(halo);
+      });
+
+      // Construct Trajectory Curves connecting consecutive hops
+      for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const curve = createTrajectoryCurve(p1, p2, GLOBE_RADIUS);
+
+        const curvePoints = curve.getPoints(50);
+        const curveGeo = new THREE.BufferGeometry().setFromPoints(curvePoints);
+        const curveMat = new THREE.LineBasicMaterial({
+          color: i === points.length - 2 ? 0xff003c : 0x00f0ff,
+          transparent: true,
+          opacity: 0.8,
+          linewidth: 2,
+        });
+        const curveLine = new THREE.Line(curveGeo, curveMat);
+        trajectoryGroup.add(curveLine);
+
+        // Register animated packet pulse
+        const pulseGeo = new THREE.SphereGeometry(0.5, 8, 8);
+        const pulseMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const pulseMesh = new THREE.Mesh(pulseGeo, pulseMat);
+        trajectoryGroup.add(pulseMesh);
+
+        activePulses.push({
+          mesh: pulseMesh,
+          curve: curve,
+          progress: (i / points.length),
+          speed: 0.008 + (Math.random() * 0.004),
+        });
+      }
+
+      // Audio notification
+      audio.beep(1200, 0.08, 'sine');
+    }
+
+    // Latency Canvas Histogram Renderer
+    function drawLatencyChart(hops) {
+      const canvas = document.getElementById('latency-canvas');
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * 2;
+      canvas.height = rect.height * 2;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(2, 2);
+
+      const w = rect.width;
+      const h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      if (!hops || hops.length === 0) return;
+
+      const validHops = hops.filter(hop => !hop.timed_out && hop.rtt_ms !== null);
+      if (validHops.length === 0) return;
+
+      const maxRtt = Math.max(...validHops.map(h => h.rtt_ms || 1), 50.0);
+      const barWidth = Math.max(6, Math.min(24, (w - 40) / hops.length - 4));
+      const startX = 20;
+
+      // Draw subtle grid lines
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(startX, h - 18);
+      ctx.lineTo(w - 20, h - 18);
+      ctx.stroke();
+
+      hops.forEach((hop, i) => {
+        const x = startX + i * (barWidth + 4);
+        if (hop.timed_out) {
+          ctx.fillStyle = 'rgba(255, 0, 60, 0.4)';
+          ctx.fillRect(x, h - 28, barWidth, 10);
+        } else {
+          const rtt = hop.rtt_ms || 0;
+          const barHeight = Math.max(4, (rtt / maxRtt) * (h - 32));
+          const y = h - 18 - barHeight;
+
+          ctx.fillStyle = rtt < 40 ? '#00ff88' : (rtt < 100 ? '#ffb800' : '#ff003c');
+          ctx.fillRect(x, y, barWidth, barHeight);
+
+          // Top cap glow
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(x, y, barWidth, 2);
+        }
+
+        // Hop label
+        ctx.fillStyle = '#64748b';
+        ctx.textAlign = 'center';
+        ctx.fillText(hop.hop_num, x + barWidth / 2, h - 6);
+      });
+    }
+
+    // Populate HUD Panels with Telemetry
+    function updateHUD(telemetry) {
+      document.getElementById('disp-dest-ip').innerText = telemetry.destination_ip || 'N/A';
+      document.getElementById('disp-dest-host').innerText = telemetry.target;
+      document.getElementById('metric-hops').innerText = telemetry.hops.length;
+      
+      const validRtts = telemetry.hops.filter(h => h.rtt_ms !== null).map(h => h.rtt_ms);
+      const avgRtt = validRtts.length ? (validRtts.reduce((a, b) => a + b, 0) / validRtts.length).toFixed(1) : '0.0';
+      document.getElementById('metric-avg-rtt').innerText = `${avgRtt} ms`;
+      document.getElementById('metric-jitter').innerText = `${telemetry.avg_jitter_ms} ms`;
+      document.getElementById('metric-loss').innerText = `${telemetry.packet_loss_pct}%`;
+      document.getElementById('stream-count').innerText = `${telemetry.hops.length} Hops`;
+
+      const reachedPill = document.getElementById('target-reached-pill');
+      if (telemetry.reached_destination) {
+        reachedPill.innerText = 'TARGET REACHED';
+        reachedPill.style.color = 'var(--neon-green)';
+      } else {
+        reachedPill.innerText = 'TRANSIT / FILTERED';
+        reachedPill.style.color = 'var(--amber)';
+      }
+
+      // Populate Hop List
+      const listEl = document.getElementById('hop-list');
+      listEl.innerHTML = '';
+      telemetry.hops.forEach((hop, idx) => {
+        const item = document.createElement('div');
+        item.className = 'hop-item';
+        
+        let rttClass = 'rtt-fast';
+        let rttText = `${hop.rtt_ms ? hop.rtt_ms.toFixed(1) : '*'} ms`;
+        if (hop.timed_out) {
+          rttClass = 'rtt-slow';
+          rttText = 'TIMEOUT';
+        } else if ((hop.rtt_ms || 0) > 100) {
+          rttClass = 'rtt-slow';
+        } else if ((hop.rtt_ms || 0) > 40) {
+          rttClass = 'rtt-med';
+        }
+
+        const flag = getCountryFlag(hop.country);
+        const safeCity = escapeHtml(hop.city || '');
+        const safeCountry = escapeHtml(hop.country || '');
+        const safeIp = escapeHtml(hop.ip || '---.---.---.---');
+        const loc = hop.city && hop.country ? `${flag} ${safeCity}, ${safeCountry}` : (hop.timed_out ? '⚠️ No Response' : `${flag} Transit Backbone`);
+        const rawAsn = hop.asn ? (hop.asn.length > 20 ? hop.asn.slice(0, 18) + '..' : hop.asn) : 'Direct Link';
+        const safeAsn = escapeHtml(rawAsn);
+
+        item.innerHTML = `
+          <div class="hop-row-top">
+            <span class="hop-num">#${hop.hop_num.toString().padStart(2, '0')}</span>
+            <span class="hop-ip">${safeIp}</span>
+            <span class="hop-rtt ${rttClass}">${rttText}</span>
+          </div>
+          <div class="hop-row-bottom">
+            <span class="hop-location">${loc}</span>
+            <span class="hop-asn">${safeAsn}</span>
+          </div>
+        `;
+
+        item.addEventListener('click', () => {
+          document.querySelectorAll('.hop-item').forEach(el => el.classList.remove('active'));
+          item.classList.add('active');
+          if (hop.lat !== null && hop.lon !== null) {
+            const targetPos = latLonToVector3(hop.lat, hop.lon, GLOBE_RADIUS + 30);
+            camera.position.lerp(targetPos, 0.6);
+            controls.target.copy(new THREE.Vector3(0, 0, 0));
+          }
+          audio.beep(980, 0.04, 'sine');
+        });
+
+        listEl.appendChild(item);
+      });
+
+      drawLatencyChart(telemetry.hops);
+    }
+
+    // Execute Telemetry Trace via REST API
+    async function dispatchTrace() {
+      const target = document.getElementById('target-input').value.trim() || 'google.com';
+      const mode = document.getElementById('mode-select').value;
+      const statusDot = document.getElementById('status-dot');
+      const statusText = document.getElementById('status-text');
+
+      statusDot.classList.add('scanning');
+      statusText.innerText = `SCANNING ${target.toUpperCase()}...`;
+      audio.beep(640, 0.1, 'square');
+
+      try {
+        const resp = await fetch(`/api/trace?target=${encodeURIComponent(target)}&mode=${mode}`);
+        if (!resp.ok) throw new Error('API trace failed');
+        const data = await resp.json();
+
+        renderTelemetryVisualization(data);
+        updateHUD(data);
+
+        statusDot.classList.remove('scanning');
+        statusText.innerText = 'RADAR LOCKED';
+      } catch (err) {
+        console.error(err);
+        statusDot.classList.remove('scanning');
+        statusText.innerText = 'OFFLINE HEURISTIC';
+      }
+    }
+
+    
+    // Raycasting for interactive 3D node tooltips
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    const tooltipEl = document.getElementById('globe-tooltip');
+
+    window.addEventListener('mousemove', (e) => {
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const pins = trajectoryGroup.children.filter(c => c.userData && c.userData.hop);
+      const intersects = raycaster.intersectObjects(pins);
+
+      if (intersects.length > 0) {
+        const hop = intersects[0].object.userData.hop;
+        const flag = getCountryFlag(hop.country);
+        const safeCity = escapeHtml(hop.city || 'Transit');
+        const safeCountry = escapeHtml(hop.country || 'Backbone');
+        const safeIp = escapeHtml(hop.ip || '---');
+        const safeAsn = escapeHtml(hop.asn || 'Direct Transit');
+        tooltipEl.style.display = 'block';
+        tooltipEl.style.left = e.clientX + 'px';
+        tooltipEl.style.top = e.clientY + 'px';
+        tooltipEl.innerHTML = `
+          <div style="font-weight: 700; color: var(--cyan); font-size: 11px;">HOP #${hop.hop_num.toString().padStart(2, '0')} ${flag}</div>
+          <div style="color: #fff; font-size: 12px; margin: 2px 0;">${safeIp}</div>
+          <div style="color: var(--text-muted); font-size: 10px;">${safeCity}, ${safeCountry}</div>
+          <div style="color: var(--neon-green); font-size: 10px; margin-top: 2px; font-weight: 600;">RTT: ${hop.rtt_ms ? hop.rtt_ms.toFixed(1) + ' ms' : 'N/A'}</div>
+          <div style="color: var(--purple); font-size: 9px;">${safeAsn}</div>
+        `;
+      } else {
+        tooltipEl.style.display = 'none';
+      }
+    });
+
+    const btnRotate = document.getElementById('btn-rotate');
+    if (btnRotate) {
+      btnRotate.addEventListener('click', () => {
+        controls.autoRotate = !controls.autoRotate;
+        btnRotate.innerHTML = controls.autoRotate ? '<span>🔄 ROTATE: ON</span>' : '<span>⏸️ ROTATE: OFF</span>';
+        audio.beep(840, 0.05, 'triangle');
+      });
+    }
+
+    // Event Listeners
+    document.getElementById('btn-trace').addEventListener('click', dispatchTrace);
+    document.getElementById('target-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') dispatchTrace();
+    });
+
+    document.getElementById('preset-select').addEventListener('change', (e) => {
+      if (e.target.value) {
+        document.getElementById('target-input').value = e.target.value;
+        dispatchTrace();
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      const hops = window.lastTelemetry ? window.lastTelemetry.hops : [];
+      drawLatencyChart(hops);
+    });
+
+    // Animation Loop
+    function animate() {
+      requestAnimationFrame(animate);
+
+      controls.update();
+
+      // Animate Packet Pulses along arcs
+      activePulses.forEach(pulse => {
+        pulse.progress += pulse.speed;
+        if (pulse.progress > 1.0) pulse.progress = 0.0;
+        const pos = pulse.curve.getPoint(pulse.progress);
+        pulse.mesh.position.copy(pos);
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Initial dispatch trace on page load
+    setTimeout(() => {
+      dispatchTrace();
+    }, 400);
+  </script>
+</body>
+</html>
